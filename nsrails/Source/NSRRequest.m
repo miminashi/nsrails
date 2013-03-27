@@ -299,7 +299,7 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
 													   timeoutInterval:self.config.timeoutInterval];
 	
 	[request setHTTPMethod:httpMethod];
-	[request setHTTPShouldHandleCookies:NO];
+	//[request setHTTPShouldHandleCookies:NO];
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     
 	[additionalHTTPHeaders enumerateKeysAndObjectsUsingBlock:
