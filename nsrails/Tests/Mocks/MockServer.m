@@ -75,17 +75,17 @@
 
 + (NSArray *) statusCodes
 {
-	return [NSArray arrayWithObjects:[NSNumber numberWithInt:404], [NSNumber numberWithInt:404], [NSNumber numberWithInt:500], [NSNumber numberWithInt:422], nil];
+	return @[@404, @404, @500, @422];
 }
 
 + (NSArray *) fullErrors
 {
-	return [NSArray arrayWithObjects:[self full404Error], [self full404Error2], [self full500Error], @"Unprocessable Entity", nil];
+	return @[[self full404Error], [self full404Error2], [self full500Error], @"Unprocessable Entity"];
 }
 
 + (NSArray *) shortErrors
 {	
-	return [NSArray arrayWithObjects:[self short404Error], [self short404Error2], [self short500Error], @"Unprocessable Entity", nil];
+	return @[[self short404Error], [self short404Error2], [self short500Error], @"Unprocessable Entity"];
 }
 
 
@@ -93,17 +93,17 @@
 
 + (NSDictionary *) newDictionaryNester
 {
-	return NSRDictionary(NSRArray(NSRDictionary(@"im",@"so"),NSRDictionary(@"hip",@"!")), @"dictionaries");
+	return @{@"dictionaries":@[@{@"so":@"im"},@{@"!":@"hip"}]};
 }
 
 + (NSDictionary *) newCustomCoder
 {
-	return NSRDictionary(@"LoweRCasE?",@"locally_lowercase",@"upper",@"remotely_uppercase",@"http://nsrails.com",@"locally_url",@"one,two,three",@"csv_array",@"invisible",@"remote_only",@"something",@"code_to_nil",@"2012-05-07T04:41:52Z",@"date_override_send",@"afsofauh",@"date_override_ret",NSRDictionary(@"COMP LOWERCASE?", @"component_name"),@"component",@"renamed",@"rails");
+	return @{@"locally_lowercase":@"LoweRCasE?",@"remotely_uppercase":@"upper",@"locally_url":@"http://nsrails.com",@"csv_array":@"one,two,three",@"remote_only":@"invisible",@"code_to_nil":@"something",@"date_override_send":@"2012-05-07T04:41:52Z",@"date_override_ret":@"afsofauh",@"component":@{@"component_name":@"COMP LOWERCASE?"},@"rails":@"renamed"};
 }
 
 + (NSDictionary *) newCustomSender
 {
-	return NSRDictionary(@"retrieve", @"retrieve_only",@"send",@"send_only",@"shared",@"shared", @"shared explicit",@"shared_explicit", @"x",@"undefined");
+	return @{@"retrieve_only":@"retrieve",@"send_only":@"send",@"shared":@"shared", @"shared_explicit":@"shared explicit", @"undefined":@"x"};
 }
 
 

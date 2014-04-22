@@ -32,7 +32,7 @@
 
 #import "NSRails.h"
 
-#import "NSString+Inflection.h"
+#import "NSString+NSRInflection.h"
 #import <objc/runtime.h>
 
 
@@ -41,7 +41,6 @@
 @interface NSRRemoteObject (private)
 
 - (NSDictionary *) remoteDictionaryRepresentationWrapped:(BOOL)wrapped fromNesting:(BOOL)nesting;
-+ (NSArray *) arrayOfInstancesFromRemoteJSON:(id)json;
 
 - (BOOL) propertyIsTimestamp:(NSString *)property;
 
@@ -126,7 +125,7 @@
 	// This will return some garbage like "Ti,GgetFoo,SsetFoo:,Vproperty"
 	// See https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtPropertyIntrospection.html
 	
-	NSString *atts = [NSString stringWithCString:property_getAttributes(property) encoding:NSUTF8StringEncoding];
+	NSString *atts = @(property_getAttributes(property));
 	
 	for (NSString *att in [atts componentsSeparatedByString:@","])
 		if ([att hasPrefix:@"T"])
@@ -155,7 +154,7 @@
         {
             while (propertyCount--)
             {
-                NSString *name = [NSString stringWithCString:property_getName(properties[propertyCount]) encoding:NSASCIIStringEncoding];
+                NSString *name = @(property_getName(properties[propertyCount]));
                 // makes sure it's not primitive
                 if ([[self.class typeForProperty:name] rangeOfString:@"@"].location != NSNotFound)
                     [results addObject:name];
@@ -196,9 +195,23 @@
     if (nestedClass)
     {
 		if ([self shouldOnlySendIDKeyForNestedObjectProperty:property])
-		{			
-			*remoteKey = [*remoteKey stringByAppendingString:@"_id"];
-			return [val remoteID];
+		{
+            if ([self valueIsArray:val])
+            {
+                NSString *singular = *remoteKey;
+                if ([singular hasSuffix:@"ies"])
+                    singular = [singular substringToIndex:singular.length-3];
+                else if ([singular hasSuffix:@"s"])
+                    singular = [singular substringToIndex:singular.length-1];
+                
+                *remoteKey = [singular stringByAppendingString:@"_ids"];
+                return [val valueForKeyPath:@"@unionOfObjects.remoteID"];
+            }
+            else
+            {
+                *remoteKey = [*remoteKey stringByAppendingString:@"_id"];
+                return [val remoteID];
+            }
 		}
 		
 		*remoteKey = [*remoteKey stringByAppendingString:@"_attributes"];
@@ -244,6 +257,11 @@
 	return [NSMutableArray class];
 }
 
+- (BOOL) shouldReplaceCollectionForProperty:(NSString *)property
+{
+    return YES;
+}
+
 - (void) decodeRemoteValue:(id)railsObject forRemoteKey:(NSString *)remoteKey
 {
 	NSString *property = [self propertyForRemoteKey:remoteKey];
@@ -270,12 +288,26 @@
                                     [previousVal array] :
                                     previousVal);
                 
+                if (![self shouldReplaceCollectionForProperty:property])
+                {
+                    [decodedObj addObjectsFromArray:previousArray];
+                }
+                
                 for (id railsElement in railsObject)
                 {
                     id decodedElement;
                     
                     //see if there's a nester that matches this ID - we'd just have to update it w/this dict
-                    NSNumber *railsID = [railsElement objectForKey:@"id"];
+                    NSNumber *railsID = railsElement[@"id"];
+                    
+                    //maybe the object is wrapped in a dict like {"post"=>{"something":"something"}}, so check to make sure
+                    if (!railsID)
+                    {
+                        NSDictionary *innerDict = railsElement[[nestedClass remoteModelName]];
+                        if ([railsElement count] == 1 && [innerDict isKindOfClass:[NSDictionary class]])
+                            railsID = innerDict[@"id"];
+                    }
+                    
                     id existing = nil;
                     
                     if (railsID)
@@ -293,7 +325,8 @@
                         [decodedElement setPropertiesUsingRemoteDictionary:railsElement];
                     }
                     
-                    [decodedObj addObject:decodedElement];
+                    if (!existing || [self shouldReplaceCollectionForProperty:property])
+                        [decodedObj addObject:decodedElement];
                 }
             }
             else
@@ -365,7 +398,7 @@
         remoteAttributes = dict;
 	
 	//support JSON that comes in like {"post"=>{"something":"something"}}
-	NSDictionary *innerDict = [dict objectForKey:[self.class remoteModelName]];
+	NSDictionary *innerDict = dict[[self.class remoteModelName]];
 	if (dict.count == 1 && [innerDict isKindOfClass:[NSDictionary class]])
 	{
 		dict = innerDict;
@@ -373,7 +406,7 @@
 		
 	for (NSString *remoteKey in dict)
 	{
-		id remoteObject = [dict objectForKey:remoteKey];
+		id remoteObject = dict[remoteKey];
 		if (remoteObject == [NSNull null])
 			remoteObject = nil;
 
@@ -415,22 +448,22 @@
 		}
 		
 		
-		[dict setObject:remoteRep forKey:remoteKey];
+		dict[remoteKey] = remoteRep;
 	}
 	
 	if (remoteDestroyOnNesting)
 	{
-		[dict setObject:[NSNumber numberWithBool:YES] forKey:@"_destroy"];
+		dict[@"_destroy"] = @YES;
 	}
 	
 	if (wrapped)
-		return [NSDictionary dictionaryWithObject:dict forKey:[self.class remoteModelName]];
+		return @{[self.class remoteModelName]: dict};
 	
 	return dict;
 }
 
 
-+ (id) objectWithRemoteDictionary:(NSDictionary *)dict
++ (instancetype) objectWithRemoteDictionary:(NSDictionary *)dict
 {
 	NSRRemoteObject *obj = [[self alloc] init];
 	[obj setPropertiesUsingRemoteDictionary:dict];
@@ -535,7 +568,7 @@
 
 #pragma mark Get specific object (class-level)
 
-+ (id) remoteObjectWithID:(NSNumber *)mID error:(NSError **)error
++ (instancetype) remoteObjectWithID:(NSNumber *)mID error:(NSError **)error
 {
 	NSDictionary *objData = [[NSRRequest requestToFetchObjectWithID:mID ofClass:self] sendSynchronous:error];
 	
@@ -555,22 +588,32 @@
 
 #pragma mark Get all objects (class-level)
 
-+ (NSArray *) arrayOfInstancesFromRemoteJSON:(id)json
++ (NSArray *) objectsWithRemoteDictionaries:(NSArray *)remoteDictionaries
 {
-	if (!json)
-		return nil;
-	
-	if ([json isKindOfClass:[NSDictionary class]])
+	if ([remoteDictionaries isKindOfClass:[NSDictionary class]])
 	{
 		//probably has root in front of it - "posts":[{},{}]
-		if ([json count] == 1)
+		if ([remoteDictionaries count] == 1)
 		{
-			json = [[json allValues] objectAtIndex:0];
+			remoteDictionaries = [(NSDictionary *)remoteDictionaries allValues][0];
 		}
 	}
-	
-	[json translateRemoteDictionariesIntoInstancesOfClass:self];
-	return json;
+    
+    if (![remoteDictionaries isKindOfClass:[NSArray class]])
+        return nil;
+
+    NSMutableArray *array = [NSMutableArray array];
+    
+	for (NSDictionary *dict in remoteDictionaries)
+	{
+		if ([dict isKindOfClass:[NSDictionary class]])
+		{
+			NSRRemoteObject *obj = [self objectWithRemoteDictionary:dict];
+            [array addObject:obj];
+		}
+	}
+    
+	return array;
 }
 
 + (NSArray *) remoteAll:(NSError **)error
@@ -581,7 +624,7 @@
 + (NSArray *) remoteAllViaObject:(NSRRemoteObject *)obj error:(NSError **)error
 {
     id json = [[NSRRequest requestToFetchAllObjectsOfClass:self viaObject:obj] sendSynchronous:error];
-	return [self arrayOfInstancesFromRemoteJSON:json];
+	return [self objectsWithRemoteDictionaries:json];
 }
 
 + (void) remoteAllAsync:(NSRFetchAllCompletionBlock)completionBlock
@@ -595,7 +638,7 @@
 	 ^(id result, NSError *error) 
 	 {
 		 if (completionBlock)
-			 completionBlock([self arrayOfInstancesFromRemoteJSON:result],error);
+			 completionBlock([self objectsWithRemoteDictionaries:result],error);
 	 }];
 }
 

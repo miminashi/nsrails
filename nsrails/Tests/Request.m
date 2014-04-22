@@ -14,7 +14,7 @@
 
 - (NSURLRequest *) HTTPRequest;
 
-- (NSError *) errorForResponse:(id)response statusCode:(NSInteger)statusCode;
+- (NSError *) errorForResponse:(id)jsonResponse existingError:(NSError *)existing statusCode:(NSInteger)statusCode;
 - (id) receiveResponse:(NSHTTPURLResponse *)response data:(NSData *)data error:(NSError **)error;
 
 @end
@@ -44,12 +44,12 @@
 	NSURLRequest *request = [req HTTPRequest];
 	STAssertEqualObjects([request.URL description], @"http://myapp.com", nil);
 
-	[req.queryParameters setObject:@"etc" forKey:@"q"];
+	req.queryParameters = @{@"q":@"etc"};
 	
 	request = [req HTTPRequest];
 	STAssertEqualObjects([request.URL description], @"http://myapp.com?q=etc", nil);
 	
-	[req.queryParameters setObject:@"num2" forKey:@"qz"];
+	req.queryParameters =@{@"q":@"etc", @"qz":@"num2"};
 	
 	request = [req HTTPRequest];
 	STAssertEqualObjects([request.URL description], @"http://myapp.com?q=etc&qz=num2", nil);
@@ -59,7 +59,7 @@
 	request = [req HTTPRequest];
 	STAssertEqualObjects([request.URL description], @"http://myapp.com/test?q=etc&qz=num2", nil);
 	
-	[req.queryParameters removeAllObjects];
+	req.queryParameters = nil;
 	
 	request = [req HTTPRequest];
 	STAssertEqualObjects([request.URL description], @"http://myapp.com/test", nil);
@@ -97,19 +97,24 @@
 	STAssertEqualObjects([request HTTPMethod], @"GET", nil);
 	STAssertNil([request HTTPBody], nil);
 
-	req.body = [NSArray array];
+	req.body = @[];
 	request = [req HTTPRequest];
 	STAssertEqualObjects([request HTTPBody], [@"[]" dataUsingEncoding:NSUTF8StringEncoding], nil);
 
 	[req routeTo:@"hello"];
 	request = [req HTTPRequest];
 	STAssertEqualObjects([request.URL description], @"http://myapp.com/hello", nil);
-
-	req.body = @":f,aifj*(O#P:???";
-	STAssertThrows([req HTTPRequest], nil);
-
-	req.body = @"{hello:man}";
-	STAssertThrows([req HTTPRequest], nil);	
+    
+    req = [NSRRequest POST];    
+    NSString* strBody = @"this=that&thisarray[]=thatvalue";
+    [req setBody:strBody];
+    [req setAdditionalHTTPHeaders:@{@"Content-Type":@"application/x-www-form-urlencoded"}];
+    request = [req HTTPRequest];
+    NSData* data = [strBody dataUsingEncoding:NSUTF8StringEncoding];
+    STAssertEqualObjects(request.HTTPBody, data, @"Body of NSRRequest was not able to be set to an NSString");
+    
+    [req setAdditionalHTTPHeaders:nil];
+    STAssertThrows([req HTTPRequest], @"Should throw exception because no Content-Type header was given when POST body was set as a string.");
 }
 
 /* With objects */
@@ -160,7 +165,7 @@
 	STAssertEqualObjects(request.route, @"parents/action", nil);
 	
 	//object (id)
-	NSDictionary *idDict = NSRDictionary(NSRNumber(1), @"id");
+	NSDictionary *idDict = @{@"id":@1};
 	
 	[request routeToObject:[NestParent objectWithRemoteDictionary:idDict]];	
 	STAssertEqualObjects(request.route, @"parents/1", nil);
@@ -211,14 +216,14 @@
 	pref.parent = [[NestParent alloc] init];
 	STAssertThrows([request routeToObject:pref], @"Should throw exception bc association's rID is nil");
 	
-	pref.parent.remoteID = NSRNumber(1);
+	pref.parent.remoteID = @1;
 	[request routeToObject:pref];
 	STAssertEqualObjects(request.route, @"parents/1/prefs", nil);
 	
 	[request routeToObject:pref withCustomMethod:@"action"];
 	STAssertEqualObjects(request.route, @"parents/1/prefs/action", nil);
 	
-	pref.remoteID = NSRNumber(5);
+	pref.remoteID = @5;
 	[request routeToObject:pref];
 	STAssertEqualObjects(request.route, @"parents/1/prefs/5", nil);
 	
@@ -246,7 +251,7 @@
 	[request routeToObject:smth2 withCustomMethod:@"action"];
 	STAssertEqualObjects(request.route, @"pref2s/action", nil);
 	
-	smth2.remoteID = [NSNumber numberWithInt:15];
+	smth2.remoteID = @15;
 	
 	for (int i = 0; i < 2; i++)
 	{
@@ -276,7 +281,7 @@
 		[request routeToObject:smth2 withCustomMethod:@"action"];
 		STAssertEqualObjects(request.route, @"pref2s/action", nil);
 		
-		smth2.remoteID = [NSNumber numberWithInt:1];
+		smth2.remoteID = @1;
 		
 		[request routeToObject:smth2];
 		STAssertEqualObjects(request.route, @"pref2s/1", nil);
@@ -287,7 +292,7 @@
 		smth2.childParent = [[NestChildPrefixed alloc] init];
 		STAssertThrowsSpecificNamed([request routeToObject:smth2], NSException, NSRNullRemoteIDException, @"Should still crash, because 'thePrefixer' relation has a nil remoteID");
 		
-		smth2.childParent.remoteID = [NSNumber numberWithInt:15];
+		smth2.childParent.remoteID = @15;
 		
 		[request routeToObject:smth2];
 		STAssertEqualObjects(request.route, @"prefs/15/pref2s/1", nil);
@@ -298,7 +303,7 @@
 		smth2.childParent.parent = [[NestParent alloc] init];
 		STAssertThrowsSpecificNamed([request routeToObject:smth2], NSException, NSRNullRemoteIDException, @"Should STILL crash, because 'thePrefixer' relation's 'custom' has a nil remoteID");
 		
-		smth2.childParent.parent.remoteID = [NSNumber numberWithInt:23];
+		smth2.childParent.parent.remoteID = @23;
 		
 		[request routeToObject:smth2];
 		STAssertEqualObjects(request.route, @"parents/23/prefs/15/pref2s/1", nil);
@@ -339,7 +344,7 @@
 	STAssertEqualObjects(create.httpMethod, @"POST", nil);
 	STAssertEqualObjects(create.body, [norm remoteDictionaryRepresentationWrapped:YES], nil);
 	
-	norm.remoteID = NSRNumber(5);
+	norm.remoteID = @5;
 	
 	create = [NSRRequest requestToCreateObject:norm];
 	STAssertEqualObjects(create.route, @"parents", @"Should ignore ID in route");
@@ -349,7 +354,7 @@
 	norm.remoteID = nil;
 	STAssertThrows([NSRRequest requestToFetchObject:norm], @"Should throw nil rID");
 	
-	norm.remoteID = NSRNumber(5);
+	norm.remoteID = @5;
 	NSRRequest *fetch = [NSRRequest requestToFetchObject:norm];
 	STAssertEqualObjects(fetch.route, @"parents/5", nil);
 	STAssertEqualObjects(fetch.httpMethod, @"GET", nil);
@@ -360,22 +365,27 @@
 	norm.remoteID = nil;
 	STAssertThrows([NSRRequest requestToUpdateObject:norm], @"Should throw nil rID");
 	
-	norm.remoteID = NSRNumber(5);
+    [[NSRConfig defaultConfig] configureToRailsVersion:NSRRailsVersion3];
+	norm.remoteID = @5;
 	NSRRequest *update = [NSRRequest requestToUpdateObject:norm];
 	STAssertEqualObjects(update.route, @"parents/5", nil);
 	STAssertEqualObjects(update.httpMethod, @"PUT", nil);
 	STAssertEqualObjects(update.body, [norm remoteDictionaryRepresentationWrapped:YES], nil);
 	
-	[[NSRConfig defaultConfig] setUpdateMethod:@"PATCH"];
+    [[NSRConfig defaultConfig] configureToRailsVersion:NSRRailsVersion4];
 	update = [NSRRequest requestToUpdateObject:norm];
 	STAssertEqualObjects(update.httpMethod, @"PATCH", nil);
+	
+	[[NSRConfig defaultConfig] setUpdateMethod:@"xxx"];
+	update = [NSRRequest requestToUpdateObject:norm];
+	STAssertEqualObjects(update.httpMethod, @"xxx", nil);
 		
 	/* DELETE */
 	
 	norm.remoteID = nil;
 	STAssertThrows([NSRRequest requestToDestroyObject:norm], @"Should throw nil rID");
 	
-	norm.remoteID = NSRNumber(5);
+	norm.remoteID = @5;
 	NSRRequest *delete = [NSRRequest requestToDestroyObject:norm];
 	STAssertEqualObjects(delete.route, @"parents/5", nil);
 	STAssertEqualObjects(delete.httpMethod, @"DELETE", nil);
@@ -386,7 +396,7 @@
 	norm.remoteID = nil;
 	STAssertThrows([NSRRequest requestToReplaceObject:norm], @"Should throw nil rID");
 	
-	norm.remoteID = NSRNumber(5);
+	norm.remoteID = @5;
 	NSRRequest *replace = [NSRRequest requestToReplaceObject:norm];
 	STAssertEqualObjects(replace.route, @"parents/5", nil);
 	STAssertEqualObjects(replace.httpMethod, @"PUT", nil);
@@ -396,7 +406,7 @@
 	
 	STAssertThrows([NSRRequest requestToFetchObjectWithID:nil ofClass:[NestParent class]], @"Should throw nil rID");
 	
-	NSRRequest *findOne = [NSRRequest requestToFetchObjectWithID:NSRNumber(1) ofClass:[NestParent class]];
+	NSRRequest *findOne = [NSRRequest requestToFetchObjectWithID:@1 ofClass:[NestParent class]];
 	STAssertEqualObjects(findOne.route, @"parents/1", nil);
 	STAssertEqualObjects(findOne.httpMethod, @"GET", nil);
 	STAssertNil(findOne.body, nil);
@@ -419,7 +429,7 @@
 	
 	/* FIND ALL VIA OBJECT */
 	
-	norm.remoteID = NSRNumber(5);
+	norm.remoteID = @5;
 	
 	NSRRequest *findAllObj = [NSRRequest requestToFetchAllObjectsOfClass:[NestChildPrefixed class] viaObject:norm];
 	STAssertEqualObjects(findAllObj.route, @"parents/5/prefs", nil);
@@ -492,46 +502,47 @@
 }
 
 - (void) test_error_detection
-{	
+{
+	NSString *url = @"http://localhost:3000";
+	[[NSRConfig defaultConfig] setAppURL:url];
+
 	NSRRequest *r = [NSRRequest GET];
 	
 	// 404 Not Found
 	
 	for (int i = 0; i < [MockServer fullErrors].count; i++)
 	{
-		NSString *fullError = [[MockServer fullErrors] objectAtIndex:i];
-		NSString *shortError = [[MockServer shortErrors] objectAtIndex:i];
-		NSInteger code = [[[MockServer statusCodes] objectAtIndex:i] integerValue];
+		NSString *fullError = [MockServer fullErrors][i];
+		NSString *shortError = [MockServer shortErrors][i];
+		NSInteger code = [[MockServer statusCodes][i] integerValue];
 		
 		//Test with succinct (default)
 		[[NSRConfig defaultConfig] setSuccinctErrorMessages:YES];
 		
-		NSError *error = [r errorForResponse:fullError statusCode:code];
+		NSError *error = [r errorForResponse:fullError existingError:nil statusCode:code];
 		STAssertEqualObjects([error domain], NSRRemoteErrorDomain, @"Succinct error messages failed");
-		STAssertEqualObjects([[error userInfo] objectForKey:NSLocalizedDescriptionKey], shortError, @"Succinct message extraction failed for short message");
-		STAssertNil([[error userInfo] objectForKey:NSRValidationErrorsKey], @"Validation errors dict should not have been created for 404");
-		STAssertEquals([[error userInfo] objectForKey:NSRRequestObjectKey],r,@"Should include itself as the request");
-        
+		STAssertEqualObjects([error userInfo][NSLocalizedDescriptionKey], shortError, @"Succinct message extraction failed for short message");
+		STAssertEquals([error userInfo][NSRRequestObjectKey],r,@"Should include itself as the request");
+
 		//Test without succinct
 		[[NSRConfig defaultConfig] setSuccinctErrorMessages:NO];
 		
-		NSError *error2 = [r errorForResponse:fullError statusCode:code];
+		NSError *error2 = [r errorForResponse:fullError existingError:nil statusCode:code];
 		STAssertEqualObjects([error2 domain], NSRRemoteErrorDomain, @"Succinct error messages failed");
-		STAssertTrue([[[error2 userInfo] objectForKey:NSLocalizedDescriptionKey] isEqualToString:fullError], @"NO succinct error messages failed (bad!)");
-		STAssertNil([[error2 userInfo] objectForKey:NSRValidationErrorsKey], @"Validation errors dict should not have been created for 404");
-        STAssertEquals([[error userInfo] objectForKey:NSRRequestObjectKey],r,@"Should include itself as the request");
+		STAssertTrue([[error2 userInfo][NSLocalizedDescriptionKey] isEqualToString:fullError], @"NO succinct error messages failed (bad!)");
+		STAssertEquals([error2 userInfo][NSRRequestObjectKey],r,@"Should include itself as the request");
     }
 	
 	// 422 Validation
 	
 	NSDictionary *response = [NSJSONSerialization JSONObjectWithData:[[MockServer validation422Error] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
 	
-	NSError *valError = [r errorForResponse:response statusCode:422];
+	NSError *valError = [r errorForResponse:response existingError:nil statusCode:422];
 	STAssertTrue([valError code] == 422, @"422 was returned, not picked up by config");
 	STAssertEqualObjects([valError domain], NSRRemoteErrorDomain, @"Succinct error messages failed");
-    STAssertEquals([[valError userInfo] objectForKey:NSRRequestObjectKey],r,@"Should include itself as the request");
+	STAssertEquals([valError userInfo][NSRRequestObjectKey],r,@"Should include itself as the request");
 
-	id valDict = [[valError userInfo] objectForKey:NSRValidationErrorsKey];
+	id valDict = [valError userInfo][NSRErrorResponseBodyKey];
 	STAssertNotNil(valDict, @"Validation errors dict not compiled");
 	STAssertTrue([valDict isKindOfClass:[NSDictionary class]], @"Object for validation key needs to be a dict");
 	STAssertTrue([[[valDict allKeys] lastObject] isKindOfClass:[NSString class]], @"Keys in val dict need to be a string");
@@ -541,13 +552,32 @@
 	
 	// 200 OK
 	
-	NSError *noError = [r errorForResponse:[MockServer ok200] statusCode:200];
+	NSError *noError = [r errorForResponse:[MockServer ok200] existingError:nil statusCode:200];
 	STAssertNil(noError, @"There should be no error for status code 200");
 	
 	// 201 Created
 	
-	NSError *noError2 = [r errorForResponse:[MockServer creation201] statusCode:201];
+	NSError *noError2 = [r errorForResponse:[MockServer creation201] existingError:nil statusCode:201];
 	STAssertNil(noError, @"There should be no error for status code 201");
+	
+	/* Try retrieving data from an Apple error message */
+	[r routeTo:@"auth_error"];
+	NSError *e;
+	id val = [r sendSynchronous:&e];
+	STAssertNil(val, @"There should be nil value for auth error");
+	STAssertEqualObjects((e.userInfo)[NSRErrorResponseBodyKey], @{@"message": @"Test string"}, @"Should include 401 error message in userInfo");
+	STAssertEquals([e userInfo][NSRRequestObjectKey],r,@"Should include itself as the request");
+    
+    /* Error for a response sent with JSON */
+    NSDictionary *dict = @{@"key":@"val"};
+    NSError *dictError = [r errorForResponse:dict existingError:nil statusCode:422];
+    STAssertTrue(dict == dictError.userInfo[NSRErrorResponseBodyKey], @"Error response value did not match the response JSON");
+    
+    /* Try a bogus hostname */
+    e = nil;
+    [[NSRConfig defaultConfig] setAppURL:@"http://ojeaoifjif"];
+    [[NSRRequest GET] sendSynchronous:&e];
+    STAssertNotNil(e, @"Should error with bogus hostname");
 }
 
 - (void) test_authentication
@@ -605,8 +635,8 @@
     req.config = config;
     req.body = @"test";
     
-    [req.queryParameters setObject:@"hi" forKey:@"t"];
-    [req.additionalHTTPHeaders setObject:@"hi" forKey:@"t"];
+    req.queryParameters = @{@"t":@"hi"};
+    req.additionalHTTPHeaders = @{@"t":@"hi"};
 		
 	STAssertTrue([NSKeyedArchiver archiveRootObject:req toFile:file], @"Archiving should've worked (serialize)");
 	
@@ -624,16 +654,16 @@
 	[[NSRConfig defaultConfig] setAppURL:@"http://localhost:3000"];
 	
 	NSRRequest *req = [NSRRequest GET];
-    [req.additionalHTTPHeaders setObject:@"hi" forKey:@"test"];
+	req.additionalHTTPHeaders = @{@"test":@"hi"};
     NSURLRequest *request = [req HTTPRequest];
     STAssertEqualObjects([request valueForHTTPHeaderField:@"test"], @"hi", @"Should send custom key");
 
-    [req.additionalHTTPHeaders setObject:@"hi" forKey:@"test2"];
+	req.additionalHTTPHeaders = @{@"test":@"hi",@"test2":@"hi"};
     request = [req HTTPRequest];
     STAssertEqualObjects([request valueForHTTPHeaderField:@"test2"], @"hi", @"Should send custom key");
     STAssertEqualObjects([request valueForHTTPHeaderField:@"test"], @"hi", @"Should still send custom key");
 
-    [req.additionalHTTPHeaders removeAllObjects];
+	req.additionalHTTPHeaders = nil;
     request = [req HTTPRequest];
     STAssertNil([request valueForHTTPHeaderField:@"test2"], @"Should've cleared custom key");
     STAssertNil([request valueForHTTPHeaderField:@"test"], @"Should've cleared custom key");
@@ -642,13 +672,13 @@
 - (void) test_additional_config_headers
 {
 	[[NSRConfig defaultConfig] setAppURL:@"http://localhost:3000"];
-	[[NSRConfig defaultConfig] setAdditionalHTTPHeaders:NSRDictionary(@"hi", @"test")];
+	[[NSRConfig defaultConfig] setAdditionalHTTPHeaders:@{@"test":@"hi"}];
 	
 	NSRRequest *req = [NSRRequest GET];
     NSURLRequest *request = [req HTTPRequest];
     STAssertEqualObjects([request valueForHTTPHeaderField:@"test"], @"hi", @"Should send custom key");
 	
-    [req.additionalHTTPHeaders setObject:@"hi" forKey:@"test2"];
+    req.additionalHTTPHeaders = @{@"test2":@"hi"};
     request = [req HTTPRequest];
     STAssertEqualObjects([request valueForHTTPHeaderField:@"test2"], @"hi", @"Should send custom key");
     STAssertEqualObjects([request valueForHTTPHeaderField:@"test"], @"hi", @"Should still send custom key");

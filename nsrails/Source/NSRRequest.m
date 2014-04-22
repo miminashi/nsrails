@@ -31,7 +31,7 @@
 #import "NSRails.h"
 
 #import "NSRRequest.h"
-#import "NSData+Base64.h"
+#import "NSData+NSRBase64.h"
 
 
 #if NSRLog > 0
@@ -55,29 +55,14 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
 
 - (NSURLRequest *) HTTPRequest;
 
-- (NSError *) errorForResponse:(id)response statusCode:(NSInteger)statusCode;
+- (NSError *) serverErrorForResponse:(id)response statusCode:(NSInteger)statusCode;
+- (NSError *) errorForResponse:(NSHTTPURLResponse *)response existingError:(NSError *)existing jsonResponse:(id)jsonResponse;
 - (id) receiveResponse:(NSHTTPURLResponse *)response data:(NSData *)data error:(NSError **)error;
 
 @end
 
 @implementation NSRRequest
 @synthesize route, httpMethod, body, config, queryParameters, additionalHTTPHeaders;
-
-- (NSMutableDictionary *) queryParameters
-{
-	if (!queryParameters)
-		queryParameters = [[NSMutableDictionary alloc] init];
-
-	return queryParameters;
-}
-
-- (NSMutableDictionary *) additionalHTTPHeaders
-{
-    if (!additionalHTTPHeaders)
-        additionalHTTPHeaders = [[NSMutableDictionary alloc] init];
-    
-    return additionalHTTPHeaders;
-}
 
 # pragma mark - Convenient routing
 
@@ -292,8 +277,6 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
 	
 	NSURL *url = [NSURL URLWithString:appendedRoute relativeToURL:base];
 	
-	NSRLogInOut(@"OUT", body, @"===> %@ to %@", httpMethod, [url absoluteString]);	
-	
 	NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url
 														   cachePolicy:NSURLRequestReloadIgnoringLocalCacheData 
 													   timeoutInterval:self.config.timeoutInterval];
@@ -329,20 +312,30 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
 		[request setValue:authHeader forHTTPHeaderField:@"Authorization"];
 	}
 	
-	if (body)
-	{
-		//let it raise an exception if invalid json object
-		NSError *e = nil;
-		NSData *data = [NSJSONSerialization dataWithJSONObject:body options:0 error:&e];
-		
-		if (data)
+  if (body)
+  {
+        NSData *data;
+        if ([body isKindOfClass:[NSString class]])
 		{
-			[request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-			[request setHTTPBody:data];
-			
-			[request setValue:[NSNumber numberWithUnsignedInteger:data.length].stringValue forHTTPHeaderField:@"Content-Length"];
-		}
- 	}
+            data = [body dataUsingEncoding:NSUTF8StringEncoding];
+            if (!additionalHTTPHeaders[@"Content-Type"])
+            {
+                [NSException raise:@"NSRRequest Error"
+                            format:@"POST body was set as a string, but no Content-Type header was specific. Please use -[NSRRequest setAdditionalHTTPHeaders:...]"];
+            }
+        }
+        else
+		{
+            //let it raise an exception if invalid json object
+            data = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+            if (data)
+            {
+                [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];                
+            }
+        }
+        [request setHTTPBody:data];
+        [request setValue:@(data.length).stringValue forHTTPHeaderField:@"Content-Length"];
+  }
 	
 	return request;
 }
@@ -360,24 +353,16 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
     return nil;
 }
 
-- (NSError *) errorForResponse:(id)response statusCode:(NSInteger)statusCode
+- (NSError *) serverErrorForResponse:(id)response statusCode:(NSInteger)statusCode
 {
     //everything ok
 	if (statusCode >= 0 && statusCode < 400)
         return nil;
 	
-	NSString *errorMessage = response;
     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
     
-    //422 means there was a validation error
-    if (statusCode == 422)
-    {
-        errorMessage = @"Unprocessable Entity";
-        if ([response isKindOfClass:[NSDictionary class]])
-            [userInfo setObject:response forKey:NSRValidationErrorsKey];
-    }
-    else 
-    {
+    if ([response isKindOfClass:[NSString class]])
+	{
         if (self.config.succinctErrorMessages)
         {
             //if error message is in HTML, parse between <pre></pre> or <h1></h1> for error message
@@ -389,70 +374,80 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
                 
                 if (succinctText)
                 {
-                    errorMessage = [succinctText stringByReplacingOccurrencesOfString:@"&quot;" withString:@"\""];
+                    response = [succinctText stringByReplacingOccurrencesOfString:@"&quot;" withString:@"\""];
                 }
             }
         }
-    }
-    
-    [userInfo setObject:errorMessage forKey:NSLocalizedDescriptionKey];
-    [userInfo setObject:self forKey:NSRRequestObjectKey];
+
+        userInfo[NSLocalizedDescriptionKey] = response;
+	}
     
     return [NSError errorWithDomain:NSRRemoteErrorDomain code:statusCode userInfo:userInfo];
 }
 
-- (id) receiveResponse:(NSHTTPURLResponse *)response data:(NSData *)data error:(NSError **)error
+- (id) jsonResponseFromData:(NSData *)data
 {
-	NSInteger code = [response statusCode];
-	
-	id jsonResponse = [NSJSONSerialization JSONObjectWithData:data 
-                                                      options:NSJSONReadingAllowFragments | NSJSONReadingMutableContainers 
+    if (!data)
+        return nil;
+    
+	id jsonResponse = [NSJSONSerialization JSONObjectWithData:data
+                                                      options:NSJSONReadingAllowFragments | NSJSONReadingMutableContainers
                                                         error:nil];
-	
+    
 	//TODO - workaround for bug with NSJSONReadingMutableContainers. it simply... doesn't work???
 	if ([jsonResponse isKindOfClass:[NSArray class]] && ![jsonResponse isKindOfClass:[NSMutableArray class]])
 		jsonResponse = [NSMutableArray arrayWithArray:jsonResponse];
 	
 	if (!jsonResponse)
 		jsonResponse = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-	
-	//see if there's an error from this response using this helper method
-	NSError *railsError = [self errorForResponse:jsonResponse statusCode:code];
-	
-	NSRLogInOut(@"IN", railsError ? @"" : jsonResponse, @"<=== Code %d; %@", (int)code, railsError ? railsError : @"");
-	
-	if (railsError)
-	{
-		if (error)
-			*error = railsError;
-		
-		return nil;
-	}
-	
+
 	return jsonResponse;
 }
 
-- (id) sendSynchronous:(NSError **)error
+- (NSError *) errorForResponse:(id)jsonResponse existingError:(NSError *)existing statusCode:(NSInteger)statusCode
+{
+	if (!existing)
+	{
+		existing = [self serverErrorForResponse:jsonResponse statusCode:statusCode];
+	}
+	
+	if (!existing)
+	{
+		// No errors
+		return nil;
+	}
+	
+	NSMutableDictionary *userInfo = [NSMutableDictionary dictionaryWithDictionary:existing.userInfo];
+	NSString *domain = existing.domain;
+	NSInteger code = existing.code;
+	
+	// Add on some extra info in user info dict
+	userInfo[NSRRequestObjectKey] = self;
+    if (jsonResponse)
+        userInfo[NSRErrorResponseBodyKey] = jsonResponse;
+
+	return [NSError errorWithDomain:domain code:code userInfo:userInfo];
+}
+
+- (id) sendSynchronous:(NSError **)errorOut
 {
 	NSURLRequest *request = [self HTTPRequest];
 	
 	NSError *appleError = nil;
 	NSHTTPURLResponse *response = nil;
 	
+    [self logOut:request];
 	NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&appleError];
 	
-	//if there's an error here there must have been an issue connecting to the server.
-	if (appleError)
-	{
-		NSRLogTagged(@"connection", @"%@", appleError);
-		
-		if (error)
-			*error = appleError;
-		
-		return nil;
-	}
+	id jsonResponse = [self jsonResponseFromData:data];
+	NSError *error = [self errorForResponse:jsonResponse existingError:appleError statusCode:response.statusCode];
 	
-	return [self receiveResponse:response data:data error:error];
+    [self logIn:jsonResponse error:error];
+    
+	if (errorOut)
+		*errorOut = error;
+
+	return (error ? nil : jsonResponse);
 }
 
 - (void) performCompletionBlock:(void(^)(void))block
@@ -486,11 +481,11 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
 	});
 	
 	NSURLRequest *request = [self HTTPRequest];
+    [self logOut:request];
 
 	[NSURLConnection sendAsynchronousRequest:request queue:asyncOperationQueue completionHandler:
 	 ^(NSURLResponse *response, NSData *data, NSError *appleError) 
 	 {
-		 
 #if TARGET_OS_IPHONE
 		 if (self.config.managesNetworkActivityIndicator)
 		 {
@@ -501,24 +496,26 @@ NSRLogTagged(inout, @"%@ %@", [NSString stringWithFormat:__VA_ARGS__],(NSRLog > 
 			 }
 		 }
 #endif
+		 id jsonResponse = [self jsonResponseFromData:data];
+		 NSError *error = [self errorForResponse:jsonResponse existingError:appleError statusCode:[(NSHTTPURLResponse *)response statusCode]];
 		 
-		 //if there's an error from the request there must have been an issue connecting to the server.
-		 if (appleError)
-		 {
-			 NSRLogTagged(@"connection", @"%@", appleError);
-			 
-			 if (block)
-				 [self performCompletionBlock:^{ block(nil, appleError); }];
-		 }
-		 else
-		 {
-			 NSError *e = nil;
-			 id jsonResp = [self receiveResponse:(NSHTTPURLResponse *)response data:data error:&e];
-			 
-			 if (block)
-				 [self performCompletionBlock:^{ block(jsonResp, e); }];
-		 }
+         [self logIn:jsonResponse error:error];
+         
+		 if (block)
+			 [self performCompletionBlock:^{ block( (error ? nil : jsonResponse), error); }];
 	 }];
+}
+
+#pragma mark - Logging
+
+- (void) logOut:(NSURLRequest *)request
+{
+    NSRLogInOut(@"OUT", body, @"===> %@ to %@", httpMethod, [request.URL absoluteString]);
+}
+
+- (void) logIn:(id)json error:(NSError *)error
+{
+    NSRLogInOut(@"IN", error ? @"" : json, @"<=== Code %d; %@", (int)error.code, error ? error : @"");
 }
 
 #pragma mark - NSCoding

@@ -59,11 +59,11 @@
 
 #pragma mark - Behavior overrides
 
-+ (id) objectWithRemoteDictionary:(NSDictionary *)dictionary
++ (instancetype) objectWithRemoteDictionary:(NSDictionary *)dictionary
 {
 	NSRRemoteManagedObject *obj = nil;
 	
-	NSNumber *objID = [dictionary objectForKey:@"id"];
+	NSNumber *objID = dictionary[@"id"];
 	
 	if (objID)
 		obj = [self findObjectWithRemoteID:objID];
@@ -78,7 +78,7 @@
 
 - (Class) containerClassForRelationProperty:(NSString *)property
 {
-	BOOL ordered = [[[[(id)self entity] propertiesByName] objectForKey:property] isOrdered];
+	BOOL ordered = [[[(id)self entity] propertiesByName][property] isOrdered];
 	return ordered ? [NSMutableOrderedSet class] : [NSMutableSet class];
 }
 
@@ -96,7 +96,7 @@
 	NSDictionary *relationships = [[(id)self entity] relationshipsByName];
 	if (relationships.count > 0)
 	{
-		NSRelationshipDescription *cdRelation = [relationships objectForKey:property];
+		NSRelationshipDescription *cdRelation = relationships[property];
 		if (cdRelation)
 		{
 			Class class = NSClassFromString(cdRelation.destinationEntity.managedObjectClassName);
@@ -240,7 +240,7 @@
 	return !error;
 }
 
-+ (id) findObjectWithRemoteID:(NSNumber *)rID
++ (instancetype) findObjectWithRemoteID:(NSNumber *)rID
 {
     NSFetchRequest *fetch = [[NSFetchRequest alloc] initWithEntityName:self.entityName];
 	fetch.predicate = [NSPredicate predicateWithFormat:@"remoteID == %@", rID];
@@ -266,7 +266,7 @@
 {
 	if (![self isKindOfClass:[NSManagedObject class]])
 	{
-		[NSException raise:NSRCoreDataException format:@"Trying to use NSRails with CoreData? Go in NSRails.h and uncomment `#define NSR_CORE_DATA`. You can also add NSR_USE_COREDATA to \"Preprocessor Macros Not Used in Precompiled Headers\" in your target's build settings. If you're in RubyMotion, change \":target => 'NSRails'\" to \":target => 'NSRailsCD'\" in your Rakefile."];
+		[NSException raise:NSRCoreDataException format:@"Trying to use NSRails with CoreData? Add `#define NSR_USE_COREDATA` to your Prefix.pch file. You can also add NSR_USE_COREDATA to \"Preprocessor Macros\" in your target's build settings. If you're in RubyMotion, change \":target => 'NSRails'\" to \":target => 'NSRailsCD'\" in your Rakefile."];
 	}
 	
 	NSManagedObjectContext *context = [[self class] getGlobalManagedObjectContextFromCmd:_cmd];
@@ -278,7 +278,7 @@
 
 - (BOOL) validatesRemoteIDUniqueness
 {
-	return ([self.primitiveRemoteID intValue] != 0 && [[(id)self changedValues] objectForKey:@"remoteID"]);
+	return ([self.primitiveRemoteID intValue] != 0 && [(id)self changedValues][@"remoteID"]);
 }
 
 - (BOOL) validateRemoteID:(id *)value error:(NSError **)error
@@ -299,7 +299,7 @@
 		{
 			*error = [NSError errorWithDomain:NSRCoreDataException
 										 code:0
-									 userInfo:[NSDictionary dictionaryWithObject:[NSString stringWithFormat:@"%@ with remoteID %@ already exists",self.class,*value] forKey:NSLocalizedDescriptionKey]];
+									 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ with remoteID %@ already exists",self.class,*value]}];
 		}
 		
 		return NO;

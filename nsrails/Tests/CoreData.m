@@ -97,6 +97,9 @@
 
 - (void) test_crud
 {
+    //test server is rails 3
+    [[NSRConfig defaultConfig] configureToRailsVersion:NSRRailsVersion3];
+    
 	NSError *e = nil;
 	[[[NSRRequest GET] routeTo:@"404.html"] sendSynchronous:&e];
 	NSRAssertNoServer([[e domain] isEqualToString:NSURLErrorDomain]);
@@ -157,7 +160,7 @@
 {
 	STAssertNil([CDPost findObjectWithRemoteID:NSRNumber(12)], @"should be nothing with rID 12");
 	
-	CDPost *p = [CDPost objectWithRemoteDictionary:NSRDictionary(NSRNumber(12),@"id")];
+	CDPost *p = [CDPost objectWithRemoteDictionary:@{@"id":@12}];
 	
 	STAssertNotNil(p, @"");
 	STAssertEqualObjects(p.remoteID, NSRNumber(12), @"");
@@ -169,14 +172,14 @@
 	STAssertEqualObjects(p2.remoteID, NSRNumber(12), @"");
 	STAssertTrue(p2.hasChanges, @"");
 	
-	CDPost *p3 = [CDPost objectWithRemoteDictionary:NSRDictionary(NSRNumber(12),@"id",@"hi",@"content")];
+	CDPost *p3 = [CDPost objectWithRemoteDictionary:@{@"id":@12,@"content":@"hi"}];
 	
 	STAssertNotNil(p3,@"");
 	STAssertTrue(p3 == p2,@"");
 	STAssertEqualObjects(p3.content, @"hi", @"");
 	STAssertTrue(p3.hasChanges, @"");
 	
-	CDPost *p4 = [CDPost objectWithRemoteDictionary:NSRDictionary(@"hi",@"content")];
+	CDPost *p4 = [CDPost objectWithRemoteDictionary:@{@"content":@"hi"}];
 	
 	STAssertNotNil(p4,@"");
 	STAssertEqualObjects(p4.remoteID, NSRNumber(0), nil);
@@ -213,8 +216,8 @@
 
 - (void) test_nested_class_override
 {
-	CDPost *p = [CDPost objectWithRemoteDictionary:NSRDictionary(NSRNumber(12),@"id")];
-	CDResponse *r = [CDResponse objectWithRemoteDictionary:NSRDictionary(NSRNumber(12),@"id")];
+	CDPost *p = [CDPost objectWithRemoteDictionary:@{@"id":@12}];
+	CDResponse *r = [CDResponse objectWithRemoteDictionary:@{@"id":@12}];
 	
 	Class responseClass = [p nestedClassForProperty:@"responses"];
 	STAssertEquals(responseClass, [CDResponse class], nil);
@@ -225,7 +228,7 @@
 
 - (void) test_container_class_override
 {
-	CDPost *p = [CDPost objectWithRemoteDictionary:NSRDictionary(NSRNumber(12),@"id")];
+	CDPost *p = [CDPost objectWithRemoteDictionary:@{@"id":@12}];
 
 	Class unorderedClass = [p containerClassForRelationProperty:@"responses"];
 	STAssertEquals(unorderedClass, [NSMutableSet class], nil);

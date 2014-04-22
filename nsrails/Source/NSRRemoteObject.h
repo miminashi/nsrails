@@ -56,12 +56,12 @@
  
  # Validation Errors
  
- If a create or update failed due to validation reasons, NSRails will package the validation failures into a dictionary. This can be retrieved using the key constant `NSRValidationErrorsKey` in the `userInfo` property of the error. This dictionary contains **each failed property as a key**, with each respective object being **an array of the reasons that property failed validation**. For instance,
+ If a create or update failed due to validation reasons, NSRails will package the validation failures into a dictionary. This can be retrieved using the key constant `NSRErrorResponseBodyKey` in the `userInfo` property of the error. This dictionary contains **each failed property as a key**, with each respective object being **an array of the reasons that property failed validation**. For instance,
  
 	 NSError *error;
 	 if (![user createRemote:&error])
 	 {
-		 NSDictionary *validationErrors = [[error userInfo] objectForKey:NSRValidationErrorsKey];
+		 NSDictionary *validationErrors = [[error userInfo] objectForKey:NSRErrorResponseBodyKey];
 		 
 		 for (NSString *property in validationErrors)
 		 {
@@ -190,7 +190,7 @@
  @param error Out parameter used if an error occurs while processing the request. May be `NULL`.
  @return Instance of receiver's class with properties from the remote object with that ID.
  */
-+ (id) remoteObjectWithID:(NSNumber *)objectID error:(NSError **)error;
++ (instancetype) remoteObjectWithID:(NSNumber *)objectID error:(NSError **)error;
 
 /**
  Retrieves an instance receiver's class corresponding to the remote object with that ID.
@@ -383,7 +383,17 @@
  Note that this dictionary needs to be JSON-parasable, meaning all keys are strings and all objects are instances of NSString, NSNumber, NSArray, NSDictionary, or NSNull.
  @return A new instance of the receiver's class with properties set using *dictionary*.
  */
-+ (id) objectWithRemoteDictionary:(NSDictionary *)remoteDictionary;
++ (instancetype) objectWithRemoteDictionary:(NSDictionary *)remoteDictionary;
+
+/**
+ Returns an array of new or existing instances of the receiver's class, based off input of any number of remote dictionaries (JSON array from the server).
+ 
+ @param remoteDictionaries Array of remote dictionaries to be evaluated.
+ 
+ Note that the dictionaries in this array need to be JSON-parasable, meaning all keys are strings and all objects are instances of NSString, NSNumber, NSArray, NSDictionary, or NSNull.
+ @return An array of new or existing instances of the receiver's class, with their properties set using the dictionaries in *remoteDictionaries*.
+ */
++ (NSArray *) objectsWithRemoteDictionaries:(NSArray *)remoteDictionaries;
 
 
 /// =============================================================================================
@@ -706,6 +716,16 @@
  @return The Objective-C property equivalent for a remote key. If your class doesn't define a property for this remote key, this should return `nil`.
  */
 - (NSString *) propertyForRemoteKey:(NSString *)remoteKey;
+
+/**
+ Whether or not to fully replace a collection for a given property, as opposed to simply adding to it.
+ 
+ Will only be called for collection properties.
+ 
+ @param property The name of the collection property.
+ @return Whether or not to fully replace a collection for a given property, as opposed to simply adding to it.
+ */
+- (BOOL) shouldReplaceCollectionForProperty:(NSString *)property;
 
 /**
  Should return a configuration for this class and its members.

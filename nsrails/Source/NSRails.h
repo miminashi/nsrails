@@ -1,7 +1,7 @@
 /*
  
  _|_|_|    _|_|  _|_|  _|_|  _|  _|      _|_|   
- _|  _|  _|_|    _|    _|_|  _|  _|_|  _|_|    v2.0.1
+ _|  _|  _|_|    _|    _|_|  _|  _|_|  _|_|    v2.1.2
  
  NSRails.h
  
@@ -28,15 +28,6 @@
  
  */
 
-// CoreData
-// ============
-// #define NSR_USE_COREDATA
-
-// Uncomment the line above if you want to enable CoreData
-// You can also add NSR_USE_COREDATA to "Preprocessor Macros Not Used in Precompiled Headers" in your target's build settings
-//   See http://dingbat.github.com/nsrails/Classes/NSRRemoteManagedObject.html for more details
-
-
 // Logging
 // =============
 //					As undefined, NSRails will log nothing
@@ -49,6 +40,5 @@
 #import "NSRConfig.h"
 #import "NSRRemoteObject.h"
 #import "NSRRemoteManagedObject.h"
-#import "NSMutableArray+NSRails.h"
 #import "NSRRequest.h"
 

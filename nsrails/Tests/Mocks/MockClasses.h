@@ -26,7 +26,7 @@
 @property (nonatomic) BOOL noResponseRelationship;
 @property (nonatomic, strong) NSString *author, *content;
 @property (nonatomic, strong) NSDate *updatedAt;
-@property (nonatomic, strong) NSMutableArray *responses;
+@property (nonatomic, strong) NSMutableArray *responses, *onlyIDResponses;
 @end
 
 @interface Response : NSRRemoteObject
@@ -65,7 +65,7 @@
 @end
 
 @interface Bird : NSRRemoteObject
-@property (nonatomic) BOOL nestEggs;
+@property (nonatomic) BOOL nestEggs, nondestructiveEggs;
 @property (nonatomic, strong) NSMutableArray *eggs;
 @property (nonatomic, strong) NSString *name;
 @end

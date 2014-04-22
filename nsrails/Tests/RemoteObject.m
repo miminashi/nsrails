@@ -11,7 +11,6 @@
 @interface NSRRemoteObject (private)
 
 + (NSString *) typeForProperty:(NSString *)prop;
-+ (NSArray *) arrayOfInstancesFromRemoteJSON:(id)json;
 
 @end
 
@@ -27,8 +26,9 @@
 - (void) test_introspection
 {
 	NSArray *props = [[[SubClass alloc] init] remoteProperties];
-	
-	NSRAssertEqualArraysNoOrder(props, NSRArray(@"remoteID", @"superString", @"subDate", @"anything"));
+	NSArray *a = @[@"remoteID", @"superString", @"subDate", @"anything"];
+    
+	NSRAssertEqualArraysNoOrder(props, a);
 	
 	
 	STAssertNil([SubClass typeForProperty:@"unknown"], @"Introspection should not pick up non-existent properties");
@@ -47,13 +47,13 @@
 	p.author = @"hi";
 	
 	NSDictionary *sendDict = [p remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([sendDict objectForKey:@"post"], @"Shouldn't include itself as a key for no wrap");
-	STAssertEqualObjects([sendDict objectForKey:@"author"], @"hi", nil);
+	STAssertNil(sendDict[@"post"], @"Shouldn't include itself as a key for no wrap");
+	STAssertEqualObjects(sendDict[@"author"], @"hi", nil);
 	
 	NSDictionary *sendDictWrapped = [p remoteDictionaryRepresentationWrapped:YES];
-	NSRAssertEqualArraysNoOrder(sendDictWrapped.allKeys, NSRArray(@"post"));
-	STAssertTrue([[sendDictWrapped objectForKey:@"post"] isKindOfClass:[NSDictionary class]], @"Should include itself as a key for no wrap, and object should be a dict");
-	STAssertEquals([[sendDictWrapped objectForKey:@"post"] count], [sendDict count], @"Inner dict should have same amount of keys as nowrap");
+	NSRAssertEqualArraysNoOrder(sendDictWrapped.allKeys, @[@"post"]);
+	STAssertTrue([sendDictWrapped[@"post"] isKindOfClass:[NSDictionary class]], @"Should include itself as a key for no wrap, and object should be a dict");
+	STAssertEquals([sendDictWrapped[@"post"] count], [sendDict count], @"Inner dict should have same amount of keys as nowrap");
 	
 	
 	/** Parsing wrap **/
@@ -61,7 +61,7 @@
 	Tester *t = [[Tester alloc] init];
 	STAssertNil(t.remoteAttributes, @"Shouldn't have any remoteAttributes on first init");
 	
-	NSDictionary *dict = [[NSDictionary alloc] initWithObjectsAndKeys:@"test", @"tester", nil];
+	NSDictionary *dict = @{@"tester": @"test"};
 	
 	[t setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(t.tester, @"test", @"");
@@ -71,7 +71,7 @@
 	
 	t.tester = nil;
 	
-	NSDictionary *dictEnveloped = [[NSDictionary alloc] initWithObjectsAndKeys:[[NSDictionary alloc] initWithObjectsAndKeys:@"test",@"tester", nil], @"tester", nil];
+	NSDictionary *dictEnveloped = @{@"tester": @{@"tester": @"test"}};
 	[t setPropertiesUsingRemoteDictionary:dictEnveloped];
 	STAssertEqualObjects(t.tester, @"test", @"");
 }
@@ -79,15 +79,15 @@
 - (void) test_dict_setting
 {
 	Post *p = [[Post alloc] init];
-	[p setPropertiesUsingRemoteDictionary:[NSDictionary dictionary]];
+	[p setPropertiesUsingRemoteDictionary:@{}];
 	
 	for (int i = 0; i < 2; i++)
 	{
-		NSDictionary *dict = NSRDictionary(@"dan",@"author", @"hi",@"content", NSRNumber(10),@"id");
+		NSDictionary *dict = @{@"author":@"dan", @"content":@"hi", @"id":@10};
 		
 		//should be identical with wrapped dict
 		if (i == 1)
-			dict = [NSDictionary dictionaryWithDictionary:dict];
+			dict = @{@"post":dict};
 		
 		p.author = nil; p.content = nil; p.remoteID = nil;
 		
@@ -96,7 +96,7 @@
 			[p setPropertiesUsingRemoteDictionary:dict];
 			STAssertEqualObjects(p.author, @"dan", nil);
 			STAssertEqualObjects(p.content, @"hi", nil);
-			STAssertEqualObjects(p.remoteID, NSRNumber(10), nil);
+			STAssertEqualObjects(p.remoteID, @(10), nil);
 			
 			if (i == 0)
 				p.author = @"CHANGE";
@@ -109,7 +109,7 @@
 
 	/** Dates **/
 	
-	NSDictionary *dict = NSRDictionary([MockServer datetime],@"updated_at");
+	NSDictionary *dict = @{@"updated_at":[MockServer datetime]};
 
 	[p setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(p.author, @"dan", nil);
@@ -125,8 +125,8 @@
 	
 	Tester *t = [[Tester alloc] init];
 	
-	NSArray *array = NSRArray(@"hello", NSRNumber(15), NSRDictionary(@"hi",@"there"), NSRArray(@"hop"));
-	dict = NSRDictionary(array,@"array");
+	NSArray *array = @[@"hello", @15, @{@"there":@"hi"}, @[@"hop"]];
+	dict = @{@"array":array};
 	
 	[t setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(t.array, array, nil);
@@ -134,16 +134,16 @@
 	[t setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(t.array, array, nil);
 
-	array = NSRArray(@"hello", @"CHANGE", NSRDictionary(@"hi",@"there"), NSRArray(@"hop"));
-	dict = NSRDictionary(array,@"array");
+	array = @[@"hello", @"CHANGE", @{@"there":@"hi"}, @[@"hop"]];
+	dict = @{@"array":array};
 
 	[t setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(t.array, array, nil);
 
 	/** Dicts **/
 	
-	NSDictionary *dictionary = NSRDictionary(NSRNumber(34), @"key", NSRArray(array), @"array", @"xx", @"string");
-	dict = NSRDictionary(dictionary,@"dictionary");
+	NSDictionary *dictionary = @{@"key":@34, @"array":@[array], @"string":@"xx"};
+	dict = @{@"dictionary":dictionary};
 	
 	[t setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(t.dictionary, dictionary, nil);
@@ -152,7 +152,7 @@
 	STAssertEqualObjects(t.dictionary, dictionary, nil);
 	
 	[t setPropertiesUsingRemoteDictionary:dict];
-	dict = NSRDictionary(dictionary,@"dictionary");
+	dict = @{@"dictionary":dictionary};
 
 	[t setPropertiesUsingRemoteDictionary:dict];
 	STAssertEqualObjects(t.dictionary, dictionary, nil);
@@ -161,10 +161,10 @@
 		
 	STAssertNoThrow([t setPropertiesUsingRemoteDictionary:nil], @"Shouldn't blow up on setting to nil dictionary");
 	
-	[t setPropertiesUsingRemoteDictionary:NSRDictionary([NSNull null], @"tester")];
+	[t setPropertiesUsingRemoteDictionary:@{@"tester":[NSNull null]}];
 	STAssertNil(t.tester, @"tester should be nil after setting from JSON");
 	
-	[t setPropertiesUsingRemoteDictionary:NSRDictionary(NSRDictionary([NSNull null], @"tester"), @"tester")];
+	[t setPropertiesUsingRemoteDictionary:@{@"tester":@{@"tester":[NSNull null]}}];
 	STAssertNil(t.tester, @"tester should be nil after setting from JSON");
 	
 	t.tester = (id)[[NSScanner alloc] init];
@@ -181,7 +181,7 @@
 	NSString *file = [NSHomeDirectory() stringByAppendingPathComponent:@"test.dat"];
 	
 	Tester *e = [[Tester alloc] init];
-	e.remoteID = [NSNumber numberWithInt:5];
+	e.remoteID = @5;
 	BOOL s = [NSKeyedArchiver archiveRootObject:e toFile:file];
 	
 	STAssertTrue(s, @"Archiving should've worked (serialize)");
@@ -192,24 +192,24 @@
 
 - (void) test_index_json_into_array
 {
-	NSArray *remoteJSON = NSRMArray(NSRDictionary(@"dan",@"author"), NSRDictionary(@"michael",@"author"));
-	NSArray *array = [Post arrayOfInstancesFromRemoteJSON:remoteJSON];
+	id remoteJSON = @[@{@"author":@"dan"}, @{@"author":@"michael"}];
+	NSArray *array = [Post objectsWithRemoteDictionaries:remoteJSON];
 	
 	STAssertNotNil(array, nil);
-	STAssertEquals(array.count, remoteJSON.count, nil);
-	STAssertTrue([[array objectAtIndex:0] isKindOfClass:[Post class]], nil);
-	STAssertEqualObjects([[array objectAtIndex:0] author], @"dan", nil);
+	STAssertEquals(array.count, [remoteJSON count], nil);
+	STAssertTrue([array[0] isKindOfClass:[Post class]], nil);
+	STAssertEqualObjects([array[0] author], @"dan", nil);
 }
 
 - (void) test_index_json_into_array_with_root
 {
-	NSArray *remoteJSON = NSRDictionary(NSRMArray(NSRDictionary(@"dan",@"author"), NSRDictionary(@"michael",@"author")), @"posts");
-	NSArray *array = [Post arrayOfInstancesFromRemoteJSON:remoteJSON];
+	id remoteJSON = @{@"posts":@[@{@"author":@"dan"}, @{@"author":@"michael"}]};
+	NSArray *array = [Post objectsWithRemoteDictionaries:remoteJSON];
 	
 	STAssertNotNil(array, nil);
 	STAssertEquals(array.count, (NSUInteger)2, nil);
-	STAssertTrue([[array objectAtIndex:0] isKindOfClass:[Post class]], nil);
-	STAssertEqualObjects([[array objectAtIndex:0] author], @"dan", nil);
+	STAssertTrue([array[0] isKindOfClass:[Post class]], nil);
+	STAssertEqualObjects([array[0] author], @"dan", nil);
 }
 
 /*************
@@ -226,7 +226,8 @@
 	STAssertTrue([p.dateOverrideRet isEqualToDate:[p customDate]], @"Should've used custom decode");
 	STAssertNil(p.codeToNil, @"Should've decoded codeToNil into nil");
 	STAssertEqualObjects([p.locallyURL description], @"http://nsrails.com", @"Should've decoded into URL & retain content");
-	STAssertEqualObjects(p.csvArray, NSRArray(@"one", @"two", @"three"), @"Should've decoded into an array & retain content");
+    NSArray *a = @[@"one", @"two", @"three"];
+	STAssertEqualObjects(p.csvArray, a, @"Should've decoded into an array & retain content");
 	STAssertEqualObjects(p.locallyLowercase, @"lowercase?", @"Should've decoded into lowercase");
 	STAssertEqualObjects(p.remotelyUppercase, @"upper", @"Should've kept the same");
 	STAssertEqualObjects(p.componentWithFlippingName.componentName, @"comp lowercase?", @"Should've decoded comp name into lowercase");
@@ -235,20 +236,20 @@
 	p.codeToNil = @"Something";
 	
 	NSDictionary *sendDict = [p remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[sendDict objectForKey:@"csv_array"] isKindOfClass:[NSString class]],@"Should've encoded NSArray -> string");
-	STAssertTrue([[sendDict objectForKey:@"locally_url"] isKindOfClass:[NSString class]],@"Should've encoded NSURL -> string");
-	STAssertTrue([[sendDict objectForKey:@"code_to_nil"] isKindOfClass:[NSNull class]], @"Should be nsnull");
-	STAssertEqualObjects([sendDict objectForKey:@"csv_array"], @"one,two,three", @"Should've encoded into string & retain content");
-	STAssertEqualObjects([sendDict objectForKey:@"locally_url"], @"http://nsrails.com", @"Should've encoded into string & retain content");
-	STAssertEqualObjects([sendDict objectForKey:@"locally_lowercase"], @"lowercase?", @"Should've kept as lowercase");
-	STAssertEqualObjects([sendDict objectForKey:@"remotely_uppercase"], @"UPPER", @"Should've encoded to uppercase");
-	STAssertEqualObjects([sendDict objectForKey:@"date_override_send"], @"override!", @"Should've overriden NSDate encode");
+	STAssertTrue([sendDict[@"csv_array"] isKindOfClass:[NSString class]],@"Should've encoded NSArray -> string");
+	STAssertTrue([sendDict[@"locally_url"] isKindOfClass:[NSString class]],@"Should've encoded NSURL -> string");
+	STAssertTrue([sendDict[@"code_to_nil"] isKindOfClass:[NSNull class]], @"Should be nsnull");
+	STAssertEqualObjects(sendDict[@"csv_array"], @"one,two,three", @"Should've encoded into string & retain content");
+	STAssertEqualObjects(sendDict[@"locally_url"], @"http://nsrails.com", @"Should've encoded into string & retain content");
+	STAssertEqualObjects(sendDict[@"locally_lowercase"], @"lowercase?", @"Should've kept as lowercase");
+	STAssertEqualObjects(sendDict[@"remotely_uppercase"], @"UPPER", @"Should've encoded to uppercase");
+	STAssertEqualObjects(sendDict[@"date_override_send"], @"override!", @"Should've overriden NSDate encode");
 	NSString *dateStr = [[NSRConfig defaultConfig] stringFromDate:[p customDate]];
-	STAssertEqualObjects([sendDict objectForKey:@"date_override_ret"], dateStr, @"Should've overriden NSDate decode");
+	STAssertEqualObjects(sendDict[@"date_override_ret"], dateStr, @"Should've overriden NSDate decode");
 	STAssertEqualObjects(p.componentWithFlippingName.componentName, @"COMP LOWERCASE?", @"Should've encoded comp name into uppercase");
 	
-	STAssertEqualObjects([sendDict objectForKey:@"remote_only"], @"remote", @"Should've captured remoteOnly!");
-	STAssertEqualObjects([sendDict objectForKey:@"objc"], @"renamed", @"Should've kept objc because was not set");
+	STAssertEqualObjects(sendDict[@"remote_only"], @"remote", @"Should've captured remoteOnly!");
+	STAssertEqualObjects(sendDict[@"objc"], @"renamed", @"Should've kept objc because was not set");
 	
 	p.encodeNonJSON = YES;
 	
@@ -271,12 +272,12 @@
 	STAssertEqualObjects(p.undefined, @"local", @"Shouldn't have set undefined...");
 	
 	NSDictionary *sendDict = [p remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([sendDict objectForKey:@"retrieve_only"], @"Shouldn't send retrieve-only... -r");
-	STAssertNil([sendDict objectForKey:@"local"], @"Shouldn't send local-only... -x");
-	STAssertNil([sendDict objectForKey:@"undefined"], @"Shouldn't send undefined...");
-	STAssertEqualObjects([sendDict objectForKey:@"send_only"], @"send--local", @"Should've sent send... -s");
-	STAssertEqualObjects([sendDict objectForKey:@"shared"], @"shared", @"Should've sent shared... blank");
-	STAssertEqualObjects([sendDict objectForKey:@"shared_explicit"], @"shared explicit", @"Should've sent sharedExplicit... -rs");
+	STAssertNil(sendDict[@"retrieve_only"], @"Shouldn't send retrieve-only... -r");
+	STAssertNil(sendDict[@"local"], @"Shouldn't send local-only... -x");
+	STAssertNil(sendDict[@"undefined"], @"Shouldn't send undefined...");
+	STAssertEqualObjects(sendDict[@"send_only"], @"send--local", @"Should've sent send... -s");
+	STAssertEqualObjects(sendDict[@"shared"], @"shared", @"Should've sent shared... blank");
+	STAssertEqualObjects(sendDict[@"shared_explicit"], @"shared explicit", @"Should've sent sharedExplicit... -rs");
 }
 
 /***************
@@ -288,12 +289,12 @@
 	Bird *bird = [[Bird alloc] init];
 	
 	NSDictionary *dict = [bird remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([dict objectForKey:@"_destroy"],@"No _destroy key if no remoteDestroyOnNesting");
+	STAssertNil(dict[@"_destroy"],@"No _destroy key if no remoteDestroyOnNesting");
 	
 	bird.remoteDestroyOnNesting = YES;
 	
 	dict = [bird remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[dict objectForKey:@"_destroy"] boolValue],@"remoteDestroyOnNesting should add _destroy key");
+	STAssertTrue([dict[@"_destroy"] boolValue],@"remoteDestroyOnNesting should add _destroy key");
 	
 	Egg *e = [[Egg alloc] init];
 	e.remoteDestroyOnNesting = YES;
@@ -303,9 +304,9 @@
 	bird.remoteDestroyOnNesting = NO;
 	dict = [bird remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNil([dict objectForKey:@"_destroy"],@"No _destroy key if no remoteDestroyOnNesting");
-	STAssertTrue([[dict objectForKey:@"eggs_attributes"] isKindOfClass:[NSArray class]],@"Eggs should exist & be an array");
-	STAssertTrue([[[[dict objectForKey:@"eggs_attributes"] lastObject] objectForKey:@"_destroy"] boolValue],@"_destroy key should exist on egg if remoteDestroyOnNesting");	
+	STAssertNil(dict[@"_destroy"],@"No _destroy key if no remoteDestroyOnNesting");
+	STAssertTrue([dict[@"eggs_attributes"] isKindOfClass:[NSArray class]],@"Eggs should exist & be an array");
+	STAssertTrue([[dict[@"eggs_attributes"] lastObject][@"_destroy"] boolValue],@"_destroy key should exist on egg if remoteDestroyOnNesting");	
 }
 
 /** Has-many **/
@@ -314,57 +315,107 @@
 {
 	Bird *nn = [[Bird alloc] init];
 	
-	NSMutableDictionary *sendDict = (NSMutableDictionary *)[nn remoteDictionaryRepresentationWrapped:NO];
+	NSDictionary *sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 
-	STAssertNil([sendDict objectForKey:@"eggs"], nil);
-	STAssertNil([sendDict objectForKey:@"eggs_attributes"], nil);
+	STAssertNil(sendDict[@"eggs"], nil);
+	STAssertNil(sendDict[@"eggs_attributes"], nil);
 	
 	nn.eggs = [[NSMutableArray alloc] init];
 	
-	sendDict = (NSMutableDictionary *)[nn remoteDictionaryRepresentationWrapped:NO];
+	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNil([sendDict objectForKey:@"eggs"], nil);
-	STAssertNil([sendDict objectForKey:@"eggs_attributes"], nil);
+	STAssertNil(sendDict[@"eggs"], nil);
+	STAssertNil(sendDict[@"eggs_attributes"], nil);
 
-	[nn.eggs addObject:[[Egg alloc] init]];
+    Egg *egg = [[Egg alloc] init];
+    egg.remoteID = @999;
+	[nn.eggs addObject:egg];
 		
-	sendDict = (NSMutableDictionary *)[nn remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([sendDict objectForKey:@"eggs"], nil);
-	STAssertTrue([[[sendDict objectForKey:@"eggs_attributes"] lastObject] isKindOfClass:[NSDictionary class]], nil);
+	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
+	STAssertNil(sendDict[@"eggs"], nil);
+	STAssertTrue([[sendDict[@"eggs_attributes"] lastObject] isKindOfClass:[NSDictionary class]], nil);
 	
 	////
 	////
 	
 	nn.eggs = nil;
 	
-	sendDict = (NSMutableDictionary *)[nn remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([sendDict objectForKey:@"eggs_attributes"], @"'array' key shouldn't exist if empty");
-	STAssertNil([sendDict objectForKey:@"eggs"], @"'array' key shouldn't exist if empty");
+	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
+	STAssertNil(sendDict[@"eggs_attributes"], @"'array' key shouldn't exist if empty");
+	STAssertNil(sendDict[@"eggs"], @"'array' key shouldn't exist if empty");
 	
-	nn.eggs = [[NSMutableArray alloc] initWithObjects:[[Egg alloc] init], nil];
+	nn.eggs = [[NSMutableArray alloc] initWithObjects:egg, nil];
 	
-	sendDict = (NSMutableDictionary *)[nn remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[[sendDict objectForKey:@"eggs_attributes"] lastObject] isKindOfClass:[NSDictionary class]], @"'array' key should exist & be a dict (egg representation)");
-	STAssertTrue([[sendDict objectForKey:@"eggs_attributes"] count] == 1, @"'array' key should have one element");
+	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
+	STAssertTrue([[sendDict[@"eggs_attributes"] lastObject] isKindOfClass:[NSDictionary class]], @"'array' key should exist & be a dict (egg representation)");
+	STAssertTrue([sendDict[@"eggs_attributes"] count] == 1, @"'array' key should have one element");
 	
+    NSMutableDictionary *inDict = [NSMutableDictionary dictionaryWithDictionary:sendDict];
+    
 	//right now it's array_attributes - change to just "array" as if it was coming from rails
-	[sendDict setObject:[sendDict objectForKey:@"eggs_attributes"] forKey:@"eggs"];
-	[sendDict removeObjectForKey:@"eggs_attributes"];
+	inDict[@"eggs"] = inDict[@"eggs_attributes"];
+	[inDict removeObjectForKey:@"eggs_attributes"];
 	
-	[nn setPropertiesUsingRemoteDictionary:sendDict];
+	[nn setPropertiesUsingRemoteDictionary:inDict];
 	STAssertNotNil(nn.eggs, @"Array shouldn't be nil");
 	STAssertTrue([nn.eggs isKindOfClass:[NSArray class]], @"plain.array should be set to array");
 	STAssertTrue(nn.eggs.count == 1, @"plain.array should have one element");
 	STAssertTrue([[nn.eggs lastObject] isKindOfClass:[Egg class]], @"plain.array should be filled w/Egg");
-	
-	[[nn.eggs lastObject] setRemoteID:[NSNumber numberWithInt:5]];
-	sendDict = (NSMutableDictionary *)[nn remoteDictionaryRepresentationWrapped:NO];
-	
-	//right now it's array_attributes - change to just "array" as if it was coming from rails
-	[sendDict setObject:[sendDict objectForKey:@"eggs_attributes"] forKey:@"eggs"];
-	[sendDict removeObjectForKey:@"eggs_attributes"];
-	
-	[nn setPropertiesUsingRemoteDictionary:sendDict];
+    
+    //"wrap" an element of the has-many
+    inDict[@"eggs"] = @[@{@"egg":inDict[@"eggs"][0]}];
+	[nn setPropertiesUsingRemoteDictionary:inDict];
+	STAssertTrue(nn.eggs.count == 1, @"plain.array should have one element");
+	STAssertTrue(nn.eggs[0] == egg, @"should be the same egg");
+}
+
+- (void) test_nondestructive_hasmany
+{
+    Bird *bird = [[Bird alloc] init];
+    
+    Egg *e1 = [[Egg alloc] init];
+    e1.remoteID = @1;
+    Egg *e2 = [[Egg alloc] init];
+    e2.remoteID = @2;
+    
+    bird.eggs = [NSMutableArray arrayWithArray:@[e1,e2]];
+    
+    NSDictionary *railsDict = @{@"eggs":@[@{@"id":@3}]};
+    [bird setPropertiesUsingRemoteDictionary:railsDict];
+    STAssertTrue(bird.eggs.count == 1, @"Should be destructive");
+    STAssertTrue([bird.eggs[0] remoteID].intValue == 3, @"Should be the third egg");
+    
+    bird.nondestructiveEggs = YES;
+    
+    railsDict = @{@"eggs":@[@{@"id":@4}]};
+    [bird setPropertiesUsingRemoteDictionary:railsDict];
+    STAssertTrue(bird.eggs.count == 2, @"Should be additive");
+    STAssertTrue([[bird.eggs lastObject] remoteID].intValue == 4, @"Should be the fourth egg");
+    
+    [bird setPropertiesUsingRemoteDictionary:railsDict];
+    STAssertTrue(bird.eggs.count == 2, @"Should be additive, but unique");
+    STAssertTrue([[bird.eggs lastObject] remoteID].intValue == 4, @"Should be the fourth egg");
+}
+
+/** Multiple belongs-to (array of ID's) **/
+
+- (void) test_array_ids_only
+{
+    Response *r1 = [[Response alloc] init];
+    r1.remoteID = @1;
+    
+    Response *r2 = [[Response alloc] init];
+    r2.remoteID = @2;
+    
+    Post *post = [[Post alloc] init];
+    post.onlyIDResponses = [NSMutableArray arrayWithArray:@[r1,r2]];
+    
+    NSDictionary *dict = [post remoteDictionaryRepresentationWrapped:NO];
+    NSArray *ids = @[@1,@2];
+    
+    STAssertNil(dict[@"responses"], nil);
+    STAssertNil(dict[@"response_ids"], nil);
+    STAssertEqualObjects(dict[@"only_id_response_ids"], ids, nil);
 }
 
 /** Belongs-to **/
@@ -375,22 +426,22 @@
 	
 	NSDictionary *sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 
-	STAssertNil([sendDict objectForKey:@"bird"], nil);
-	STAssertTrue([[sendDict objectForKey:@"bird_id"] isKindOfClass:[NSNull class]], nil);
+	STAssertNil(sendDict[@"bird"], nil);
+	STAssertTrue([sendDict[@"bird_id"] isKindOfClass:[NSNull class]], nil);
 	
 	nn.bird = [[Bird alloc] init];
 	
 	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNil([sendDict objectForKey:@"bird"], nil);
-	STAssertTrue([[sendDict objectForKey:@"bird_id"] isKindOfClass:[NSNull class]], nil);
+	STAssertNil(sendDict[@"bird"], nil);
+	STAssertTrue([sendDict[@"bird_id"] isKindOfClass:[NSNull class]], nil);
 	
-	nn.bird.remoteID = NSRNumber(15);
+	nn.bird.remoteID = @(15);
 	
 	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 
-	STAssertNil([sendDict objectForKey:@"bird"], nil);
-	STAssertEqualObjects([sendDict objectForKey:@"bird_id"], NSRNumber(15), nil);
+	STAssertNil(sendDict[@"bird"], nil);
+	STAssertEqualObjects(sendDict[@"bird_id"], @(15), nil);
 }
 
 /** Has-one **/
@@ -401,22 +452,22 @@
 	
 	NSDictionary *sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNil([sendDict objectForKey:@"nest"], nil);
-	STAssertNil([sendDict objectForKey:@"nest_attributes"], nil);
+	STAssertNil(sendDict[@"nest"], nil);
+	STAssertNil(sendDict[@"nest_attributes"], nil);
 	
 	nn.nest = [[Nest alloc] init];
 	
 	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNil([sendDict objectForKey:@"nest"], nil);
-	STAssertTrue([[sendDict objectForKey:@"nest_attributes"] isKindOfClass:[NSDictionary class]], nil);
+	STAssertNil(sendDict[@"nest"], nil);
+	STAssertTrue([sendDict[@"nest_attributes"] isKindOfClass:[NSDictionary class]], nil);
 	
-	nn.nest.remoteID = NSRNumber(20);
+	nn.nest.remoteID = @(20);
 	
 	sendDict = [nn remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNil([sendDict objectForKey:@"nest"], nil);
-	STAssertEqualObjects([[sendDict objectForKey:@"nest_attributes"] objectForKey:@"id"], NSRNumber(20), nil);
+	STAssertNil(sendDict[@"nest"], nil);
+	STAssertEqualObjects(sendDict[@"nest_attributes"][@"id"], @(20), nil);
 }
 
 - (void) test_nesting_dictionaries
@@ -424,16 +475,16 @@
 	DictionaryNester *plainNester = [DictionaryNester objectWithRemoteDictionary:[MockServer newDictionaryNester]];
 	STAssertNotNil(plainNester.dictionaries, @"Dictionaries shouldn't be nil after JSON set");
 	STAssertTrue(plainNester.dictionaries.count == 2, @"Dictionaries should have 2 elements");
-	STAssertTrue([[plainNester.dictionaries objectAtIndex:0] isKindOfClass:[NSDictionary class]], @"Dictionaries obj should be of type NSDictionary");
-	STAssertEqualObjects([[plainNester.dictionaries objectAtIndex:0] objectForKey:@"so"], @"im", @"Dict elements should've been set");
+	STAssertTrue([(plainNester.dictionaries)[0] isKindOfClass:[NSDictionary class]], @"Dictionaries obj should be of type NSDictionary");
+	STAssertEqualObjects((plainNester.dictionaries)[0][@"so"], @"im", @"Dict elements should've been set");
 	
-	plainNester.dictionaries = [NSArray arrayWithObjects:[NSDictionary dictionaryWithObject:@"obj" forKey:@"key"], [NSDictionary dictionaryWithObject:@"obj2" forKey:@"key2"], nil];
+	plainNester.dictionaries = @[@{@"key": @"obj"}, @{@"key2": @"obj2"}];
 	
 	NSDictionary *send = [plainNester remoteDictionaryRepresentationWrapped:NO];
 	STAssertNotNil(send, @"Dictionaries shouldn't be nil after trying to make it");
-	STAssertTrue([[send objectForKey:@"dictionaries"] count] == 2, @"Dictionaries should have 2 elements");
-	STAssertTrue([[[send objectForKey:@"dictionaries"] objectAtIndex:0] isKindOfClass:[NSDictionary class]], @"Dictionaries obj should be of type NSDictionary");
-	STAssertEqualObjects([[[send objectForKey:@"dictionaries"] objectAtIndex:0] objectForKey:@"key"], @"obj", @"Dict elements should've been set");
+	STAssertTrue([send[@"dictionaries"] count] == 2, @"Dictionaries should have 2 elements");
+	STAssertTrue([send[@"dictionaries"][0] isKindOfClass:[NSDictionary class]], @"Dictionaries obj should be of type NSDictionary");
+	STAssertEqualObjects(send[@"dictionaries"][0][@"key"], @"obj", @"Dict elements should've been set");
 }
 
 - (void) test_recursive_nesting
@@ -455,15 +506,15 @@
 	[guy.books addObject:book];
 	
 	NSDictionary *pDict = [guy remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[pDict objectForKey:BooksKey] isKindOfClass:[NSArray class]], @"Books should be an array");
-	STAssertTrue([[[pDict objectForKey:BooksKey] lastObject] isKindOfClass:[NSDictionary class]], @"Book should be a dict");
-	STAssertNil([[[pDict objectForKey:BooksKey] lastObject] objectForKey:OwnersKey], @"Shouldn't include books's owners since it's not included in nesting");
+	STAssertTrue([pDict[BooksKey] isKindOfClass:[NSArray class]], @"Books should be an array");
+	STAssertTrue([[pDict[BooksKey] lastObject] isKindOfClass:[NSDictionary class]], @"Book should be a dict");
+	STAssertNil([pDict[BooksKey] lastObject][OwnersKey], @"Shouldn't include books's owners since it's not included in nesting");
 	
 	
 	NSDictionary *bDict = [book remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[bDict objectForKey:OwnersKey] isKindOfClass:[NSArray class]], @"Owners should be an array");
-	STAssertTrue([[[bDict objectForKey:OwnersKey] lastObject] isKindOfClass:[NSDictionary class]], @"Owner (person) should be a dict");
-	STAssertNil([[[bDict objectForKey:OwnersKey] lastObject] objectForKey:BooksKey], @"Shouldn't include owner's books since it's not included in nesting");
+	STAssertTrue([bDict[OwnersKey] isKindOfClass:[NSArray class]], @"Owners should be an array");
+	STAssertTrue([[bDict[OwnersKey] lastObject] isKindOfClass:[NSDictionary class]], @"Owner (person) should be a dict");
+	STAssertNil([bDict[OwnersKey] lastObject][BooksKey], @"Shouldn't include owner's books since it's not included in nesting");
 	
 	
 	Book *book2 = [[Book alloc] init];
@@ -475,10 +526,10 @@
 	[guy.books addObject:book2];
 	
 	pDict = [guy remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[pDict objectForKey:BooksKey] isKindOfClass:[NSArray class]], @"Books should be an array");
-	STAssertTrue([[[pDict objectForKey:BooksKey] lastObject] isKindOfClass:[NSDictionary class]], @"Book should be a dict");
-	STAssertTrue([[[[pDict objectForKey:BooksKey] lastObject] objectForKey:OwnersKey] isKindOfClass:[NSArray class]], @"Book should include owners and it should be an array");
-	STAssertTrue([[[[[pDict objectForKey:BooksKey] lastObject] objectForKey:OwnersKey] lastObject] isKindOfClass:[NSDictionary class]], @"Owner in owner's book's owners should be a dictionary");
+	STAssertTrue([pDict[BooksKey] isKindOfClass:[NSArray class]], @"Books should be an array");
+	STAssertTrue([[pDict[BooksKey] lastObject] isKindOfClass:[NSDictionary class]], @"Book should be a dict");
+	STAssertTrue([[pDict[BooksKey] lastObject][OwnersKey] isKindOfClass:[NSArray class]], @"Book should include owners and it should be an array");
+	STAssertTrue([[[pDict[BooksKey] lastObject][OwnersKey] lastObject] isKindOfClass:[NSDictionary class]], @"Owner in owner's book's owners should be a dictionary");
 	
 	
 	/*
@@ -496,20 +547,20 @@
 	[b.eggs addObject:e];
 	
 	NSDictionary *birdDict = [b remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[birdDict objectForKey:EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
-	STAssertTrue([[[birdDict objectForKey:EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
-	STAssertNil([[[birdDict objectForKey:EggsKey] lastObject] objectForKey:MotherKey], @"Shouldn't include egg's mother since it's not included in nesting");
+	STAssertTrue([birdDict[EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
+	STAssertTrue([[birdDict[EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
+	STAssertNil([birdDict[EggsKey] lastObject][MotherKey], @"Shouldn't include egg's mother since it's not included in nesting");
 	
 	e.bird = b;
 	
 	birdDict = [b remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[birdDict objectForKey:EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
-	STAssertTrue([[[birdDict objectForKey:EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
-	STAssertNil([[[birdDict objectForKey:EggsKey] lastObject] objectForKey:MotherKey], @"Shouldn't include egg's mother since it's not included in nesting");
+	STAssertTrue([birdDict[EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
+	STAssertTrue([[birdDict[EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
+	STAssertNil([birdDict[EggsKey] lastObject][MotherKey], @"Shouldn't include egg's mother since it's not included in nesting");
 	
 	NSDictionary *eggDict = [e remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[eggDict objectForKey:MotherKey] isKindOfClass:[NSDictionary class]],@"Should include mother on top-level nesting");
-	STAssertNil([[eggDict objectForKey:MotherKey] objectForKey:EggsKey],@"Mother should not include eggs (since no -n)");
+	STAssertTrue([eggDict[MotherKey] isKindOfClass:[NSDictionary class]],@"Should include mother on top-level nesting");
+	STAssertNil(eggDict[MotherKey][EggsKey],@"Mother should not include eggs (since no -n)");
 	
 	[b.eggs removeAllObjects];
 	
@@ -522,19 +573,19 @@
 	
 	birdDict = [b remoteDictionaryRepresentationWrapped:NO];
 
-	STAssertTrue([[birdDict objectForKey:EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
-	STAssertTrue([[[birdDict objectForKey:EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
-	STAssertTrue([[[[birdDict objectForKey:EggsKey] lastObject] objectForKey:MotherKey] isKindOfClass:[NSDictionary class]], @"Egg's mother should be a dict, since it was included in -n");
-	STAssertNil([[[[birdDict objectForKey:EggsKey] lastObject] objectForKey:MotherKey] objectForKey:EggsKey], @"Egg's mother's eggs shouldn't be included, since mother doesn't define -n on eggs");
+	STAssertTrue([birdDict[EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
+	STAssertTrue([[birdDict[EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
+	STAssertTrue([[birdDict[EggsKey] lastObject][MotherKey] isKindOfClass:[NSDictionary class]], @"Egg's mother should be a dict, since it was included in -n");
+	STAssertNil([birdDict[EggsKey] lastObject][MotherKey][EggsKey], @"Egg's mother's eggs shouldn't be included, since mother doesn't define -n on eggs");
 	
 	eggDict = [motherExposingEgg remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[eggDict objectForKey:MotherKey] isKindOfClass:[NSDictionary class]],@"Should include mother on top-level nesting");
-	STAssertNil([[eggDict objectForKey:MotherKey] objectForKey:EggsKey],@"Mother should not include eggs (since no -n)");
+	STAssertTrue([eggDict[MotherKey] isKindOfClass:[NSDictionary class]],@"Should include mother on top-level nesting");
+	STAssertNil(eggDict[MotherKey][EggsKey],@"Mother should not include eggs (since no -n)");
 	
 	
 	Bird *nesterBird = [[Bird alloc] init];
 	nesterBird.eggs = [[NSMutableArray alloc] init];
-	nesterBird.remoteID = [NSNumber numberWithInt:1];
+	nesterBird.remoteID = @1;
 	nesterBird.nestEggs = YES;
 	
 	Egg *e2 = [[Egg alloc] init];
@@ -543,19 +594,19 @@
 	[nesterBird.eggs addObject:e2];
 	
 	birdDict = [nesterBird remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[birdDict objectForKey:EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
-	STAssertTrue([[[birdDict objectForKey:EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
-	STAssertNil([[[birdDict objectForKey:EggsKey] lastObject] objectForKey:MotherKey], @"Shouldn't include egg's mother since it's not included in nesting");
+	STAssertTrue([birdDict[EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
+	STAssertTrue([[birdDict[EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
+	STAssertNil([birdDict[EggsKey] lastObject][MotherKey], @"Shouldn't include egg's mother since it's not included in nesting");
 	
 	eggDict = [e2 remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[eggDict objectForKey:MotherKey] isKindOfClass:[NSDictionary class]],@"Should include mother on top-level nesting");
-	STAssertTrue([[[eggDict objectForKey:MotherKey] objectForKey:EggsKey] isKindOfClass:[NSArray class]],@"Should include eggs in mother because of the -n (and should be array)");
-	STAssertTrue([[[[eggDict objectForKey:MotherKey] objectForKey:EggsKey] lastObject] isKindOfClass:[NSDictionary class]],@"Should include an egg (as a dict) in mother's eggs");
-	STAssertNil([[[[eggDict objectForKey:MotherKey] objectForKey:EggsKey] lastObject] objectForKey:MotherKey], @"Egg's mother's egg should not have a mother (since no -n)");
+	STAssertTrue([eggDict[MotherKey] isKindOfClass:[NSDictionary class]],@"Should include mother on top-level nesting");
+	STAssertTrue([eggDict[MotherKey][EggsKey] isKindOfClass:[NSArray class]],@"Should include eggs in mother because of the -n (and should be array)");
+	STAssertTrue([[eggDict[MotherKey][EggsKey] lastObject] isKindOfClass:[NSDictionary class]],@"Should include an egg (as a dict) in mother's eggs");
+	STAssertNil([eggDict[MotherKey][EggsKey] lastObject][MotherKey], @"Egg's mother's egg should not have a mother (since no -n)");
 	
 	e2.bird = nil;
 	eggDict = [e2 remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([eggDict objectForKey:MotherKey],@"Shouldn't send the mother if nil + associated");
+	STAssertNil(eggDict[MotherKey],@"Shouldn't send the mother if nil + associated");
 	
 	[nesterBird.eggs removeAllObjects];
 	
@@ -565,34 +616,34 @@
 	[nesterBird.eggs addObject:attachedEgg];
 	
 	birdDict = [nesterBird remoteDictionaryRepresentationWrapped:NO];
-	STAssertTrue([[birdDict objectForKey:EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
-	STAssertTrue([[[birdDict objectForKey:EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
-	STAssertNil([[[birdDict objectForKey:EggsKey] lastObject] objectForKey:MotherKey], @"Shouldn't have 'mother' -- 'mother_id' since b-t");
-	STAssertTrue([[[[birdDict objectForKey:EggsKey] lastObject] objectForKey:@"bird_id"] isKindOfClass:[NSNumber class]], @"Egg's mother (self)'s id should be present & be a number");
+	STAssertTrue([birdDict[EggsKey] isKindOfClass:[NSArray class]], @"Eggs should be an array");
+	STAssertTrue([[birdDict[EggsKey] lastObject] isKindOfClass:[NSDictionary class]], @"Egg should be a dict");
+	STAssertNil([birdDict[EggsKey] lastObject][MotherKey], @"Shouldn't have 'mother' -- 'mother_id' since b-t");
+	STAssertTrue([[birdDict[EggsKey] lastObject][@"bird_id"] isKindOfClass:[NSNumber class]], @"Egg's mother (self)'s id should be present & be a number");
 	
 	//should be fine here because even though eggs is marked for nesting, mother is belongs-to, so no recursion should occur
 	eggDict = [attachedEgg remoteDictionaryRepresentationWrapped:NO];
-	STAssertNil([eggDict objectForKey:MotherKey], @"'mother' key shouldn't exist - belongs-to, so should be bird_id");
-	STAssertTrue([[eggDict objectForKey:@"bird_id"] isKindOfClass:[NSNumber class]], @"mother ID should be exist and be a number");
+	STAssertNil(eggDict[MotherKey], @"'mother' key shouldn't exist - belongs-to, so should be bird_id");
+	STAssertTrue([eggDict[@"bird_id"] isKindOfClass:[NSNumber class]], @"mother ID should be exist and be a number");
 	
 	attachedEgg.bird = nil;
 	eggDict = [attachedEgg remoteDictionaryRepresentationWrapped:NO];
 	
-	STAssertNotNil([eggDict objectForKey:@"bird_id"], @"'mother_id' key should exist - belongs-to but NULL");
-	STAssertTrue([[eggDict objectForKey:@"bird_id"] isKindOfClass:[NSNull class]], @"bird_id should be exist but be null");
+	STAssertNotNil(eggDict[@"bird_id"], @"'mother_id' key should exist - belongs-to but NULL");
+	STAssertTrue([eggDict[@"bird_id"] isKindOfClass:[NSNull class]], @"bird_id should be exist but be null");
 }
 
 - (void) test_update_nested_object
 {
 	Bird *b = [[Bird alloc] init];
 	b.eggs = [[NSMutableArray alloc] init];
-	b.remoteID = NSRNumber(1);
+	b.remoteID = @(1);
 	
 	Egg *e = [[Egg alloc] init];
 	e.bird = b;
 	[b.eggs addObject:e];
 
-	NSDictionary *updateDict = NSRDictionary(NSRNumber(2), @"remoteID",NSRDictionary(NSRNumber(1), @"remoteID", @"tweety", @"name"),@"bird");
+	NSDictionary *updateDict = @{@"remoteID":@2,@"bird":@{@"remoteID":@1, @"name":@"tweety"}};
 	[e setPropertiesUsingRemoteDictionary:updateDict];
 	
 	STAssertEqualObjects(b.name, @"tweety", nil);
