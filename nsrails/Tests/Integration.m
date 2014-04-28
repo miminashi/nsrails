@@ -45,6 +45,12 @@ static BOOL noServer = NO;
 		 STAssertNil(error, @"ASYNC remoteAll on Post should have worked.'");
 		 STAssertNotNil(allPeople, @"ASYNC No errors, allPeople should not be nil.");
 	 }];
+    
+    [Post remoteAllWithOptions:@{@"limit": @1} async:^(NSArray *allPeople, NSError *error) {
+        STAssertNil(error, @"ASYNC remoteAllWithOptions on Post should have worked.");
+        STAssertNotNil(allPeople, @"ASYNC No errors, allPeople should not be nil.");
+//        STAssertEquals(allPeople.count, 1, @"with limit=1 parameter, allPeople.count should be 1");
+    }];
 	
 	
 	/////////////////

@@ -632,10 +632,28 @@
 	[self remoteAllViaObject:nil async:completionBlock];
 }
 
++ (void)remoteAllWithOptions:(NSDictionary *)options async:(NSRFetchAllCompletionBlock)completionBlock
+{
+    [self remoteAllViaObject:nil options:options async:completionBlock];
+}
+
 + (void) remoteAllViaObject:(NSRRemoteObject *)obj async:(NSRFetchAllCompletionBlock)completionBlock
 {
-    [[NSRRequest requestToFetchAllObjectsOfClass:self viaObject:obj] sendAsynchronous:
-	 ^(id result, NSError *error) 
+//    [[NSRRequest requestToFetchAllObjectsOfClass:self viaObject:obj] sendAsynchronous:
+//	 ^(id result, NSError *error) 
+//	 {
+//		 if (completionBlock)
+//			 completionBlock([self objectsWithRemoteDictionaries:result],error);
+//	 }];
+    [self remoteAllViaObject:obj options:nil async:completionBlock];
+}
+
++ (void)remoteAllViaObject:(NSRRemoteObject *)obj options:(NSDictionary *)options async:(NSRFetchAllCompletionBlock)completionBlock
+{
+    NSRRequest *request = [NSRRequest requestToFetchAllObjectsOfClass:self viaObject:obj];
+    [request setQueryParameters:[options mutableCopy]];
+    [request sendAsynchronous:
+	 ^(id result, NSError *error)
 	 {
 		 if (completionBlock)
 			 completionBlock([self objectsWithRemoteDictionaries:result],error);

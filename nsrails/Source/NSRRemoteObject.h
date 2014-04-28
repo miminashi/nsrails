@@ -178,6 +178,16 @@
  */
 + (void) remoteAllViaObject:(NSRRemoteObject *)parentObject async:(NSRFetchAllCompletionBlock)completionBlock;
 
+/**
+ 
+ */
++ (void)remoteAllWithOptions:(NSDictionary *)options async:(NSRFetchAllCompletionBlock)completionBlock;
+
+/**
+ 
+ */
++ (void)remoteAllViaObject:(NSRRemoteObject *)obj options:(NSDictionary *)options async:(NSRFetchAllCompletionBlock)completionBlock;
+
 
 /**
  Returns an instance of receiver's class corresponding to the remote object with that ID.
